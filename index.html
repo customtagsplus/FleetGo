@@ -1,42 +1,658 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>FleetManager Pro</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { background-color: #0f1115; color: #ffffff; font-family: 'Inter', sans-serif; }
-        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Cedar Grove — Fleet Tracker</title>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@400;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy:    #0d1b2a;
+    --navy2:   #162236;
+    --amber:   #f4a916;
+    --amber2:  #e09510;
+    --steel:   #2e4057;
+    --mist:    #8fa3b8;
+    --white:   #eef2f7;
+    --green:   #3ddc84;
+    --red:     #ff4d4d;
+    --panel-w: 280px;
+  }
+
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--navy); font-family: 'Inter', sans-serif; color: var(--white); }
+
+  /* ── LOGIN SCREEN ── */
+  #login-screen {
+    position: fixed; inset: 0; z-index: 9999;
+    background: var(--navy);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0;
+  }
+  #login-screen .logo {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 3px; color: var(--amber);
+    text-transform: uppercase; margin-bottom: 8px;
+  }
+  #login-screen h1 {
+    font-size: 26px; font-weight: 700; color: var(--white);
+    margin-bottom: 6px; letter-spacing: -0.5px;
+  }
+  #login-screen .sub {
+    font-size: 12px; color: var(--mist); margin-bottom: 32px;
+  }
+  .driver-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    width: min(360px, 92vw); margin-bottom: 20px;
+  }
+  .driver-btn {
+    background: var(--navy2); border: 1px solid var(--steel);
+    color: var(--white); font-size: 13px; font-weight: 600;
+    padding: 12px 10px; border-radius: 8px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'Inter', sans-serif;
+  }
+  .driver-btn:hover { background: var(--steel); border-color: var(--amber); transform: translateY(-1px); }
+  .driver-btn .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  #login-note { font-size: 11px; color: var(--mist); max-width: 300px; text-align: center; line-height: 1.5; }
+
+  /* ── MAP ── */
+  #map { position: fixed; inset: 0; z-index: 1; }
+
+  /* ── PANEL TOGGLE (mobile) ── */
+  #panel-toggle {
+    position: fixed; top: 12px; left: 12px; z-index: 500;
+    background: var(--navy2); border: 1px solid var(--steel);
+    color: var(--white); width: 40px; height: 40px; border-radius: 8px;
+    cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,.4);
+  }
+
+  /* ── SIDE PANEL ── */
+  #panel {
+    position: fixed; top: 0; left: 0; bottom: 0; width: var(--panel-w);
+    background: rgba(13, 27, 42, 0.96);
+    backdrop-filter: blur(12px);
+    border-right: 1px solid var(--steel);
+    z-index: 400; display: flex; flex-direction: column;
+    transform: translateX(-100%); transition: transform 0.25s ease;
+  }
+  #panel.open { transform: translateX(0); }
+
+  .panel-header {
+    padding: 16px 14px 12px;
+    border-bottom: 1px solid var(--steel);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .panel-header .branding .eyebrow {
+    font-family: 'Share Tech Mono', monospace; font-size: 9px;
+    letter-spacing: 3px; color: var(--amber); text-transform: uppercase;
+  }
+  .panel-header .branding h2 { font-size: 15px; font-weight: 700; color: var(--white); line-height: 1.2; }
+  #close-panel { background: none; border: none; color: var(--mist); cursor: pointer; font-size: 18px; padding: 4px; }
+
+  /* me card */
+  #me-card {
+    margin: 12px 12px 0;
+    background: var(--navy2); border: 1px solid var(--amber);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  #me-card .label { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: var(--amber); letter-spacing: 2px; margin-bottom: 4px; }
+  #me-card .name { font-size: 14px; font-weight: 700; }
+  #me-card .coords { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--mist); margin-top: 3px; }
+  #me-card .status-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  #gps-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mist); flex-shrink: 0; }
+  #gps-dot.active { background: var(--green); animation: pulse 1.5s infinite; }
+  #gps-dot.error { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  #gps-status { font-size: 11px; color: var(--mist); }
+
+  /* driver list */
+  .section-label {
+    font-family: 'Share Tech Mono', monospace; font-size: 9px;
+    letter-spacing: 2px; color: var(--mist); text-transform: uppercase;
+    padding: 12px 14px 6px;
+  }
+  #driver-list { flex: 1; overflow-y: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+  #driver-list::-webkit-scrollbar { width: 4px; }
+  #driver-list::-webkit-scrollbar-thumb { background: var(--steel); border-radius: 4px; }
+
+  .driver-row {
+    background: var(--navy2); border: 1px solid var(--steel);
+    border-radius: 7px; padding: 9px 11px;
+    cursor: pointer; transition: border-color 0.15s;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .driver-row:hover { border-color: var(--amber); }
+  .driver-row .d-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .driver-row .d-info { flex: 1; min-width: 0; }
+  .driver-row .d-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .driver-row .d-meta { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--mist); margin-top: 1px; }
+  .driver-row .d-age { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--mist); flex-shrink: 0; }
+  .driver-row.stale .d-dot { opacity: 0.4; }
+  .driver-row.stale .d-name { color: var(--mist); }
+  .driver-row.selected { border-color: var(--amber); background: rgba(244,169,22,.12); }
+  .driver-row .d-check { font-size: 14px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
+  .driver-row.selected .d-check { opacity: 1; }
+
+  /* multi-select toolbar */
+  #select-toolbar { margin: 0 12px 8px; display: none; gap: 6px; }
+  #select-toolbar.visible { display: flex; }
+  .btn-fit {
+    flex: 1; background: var(--amber); color: var(--navy);
+    font-size: 12px; font-weight: 700; border: none; border-radius: 7px;
+    padding: 8px 6px; cursor: pointer; font-family: 'Inter', sans-serif;
+  }
+  .btn-clear-sel {
+    background: none; color: var(--mist); font-size: 12px;
+    border: 1px solid var(--steel); border-radius: 7px;
+    padding: 8px 10px; cursor: pointer; font-family: 'Inter', sans-serif;
+    white-space: nowrap;
+  }
+  .truck-marker-wrap.highlighted .truck-icon {
+    filter: drop-shadow(0 0 6px #f4a916) drop-shadow(0 2px 4px rgba(0,0,0,.6));
+    animation: markerPulse 1.2s infinite;
+  }
+  @keyframes markerPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.18)} }
+
+  /* bottom controls */
+  .panel-footer { padding: 12px; border-top: 1px solid var(--steel); display: flex; flex-direction: column; gap: 8px; }
+  .btn-locate {
+    background: var(--amber); color: var(--navy); font-size: 13px; font-weight: 700;
+    border: none; border-radius: 7px; padding: 10px; cursor: pointer;
+    font-family: 'Inter', sans-serif; transition: background 0.15s;
+  }
+  .btn-locate:hover { background: var(--amber2); }
+  .btn-signout {
+    background: none; color: var(--mist); font-size: 12px;
+    border: 1px solid var(--steel); border-radius: 7px; padding: 8px; cursor: pointer;
+    font-family: 'Inter', sans-serif; transition: color 0.15s, border-color 0.15s;
+  }
+  .btn-signout:hover { color: var(--red); border-color: var(--red); }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--navy2); border: 1px solid var(--amber);
+    color: var(--white); font-size: 13px; padding: 10px 18px;
+    border-radius: 8px; z-index: 9000; transition: transform 0.3s ease;
+    white-space: nowrap; pointer-events: none;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ── LEAFLET CUSTOM MARKERS ── */
+  .truck-marker-wrap { display: flex; flex-direction: column; align-items: center; }
+  .truck-label {
+    background: rgba(13,27,42,.92); border: 1.5px solid currentColor;
+    color: var(--white); font-family: 'Inter', sans-serif;
+    font-size: 11px; font-weight: 700; padding: 2px 7px;
+    border-radius: 4px; white-space: nowrap; margin-bottom: 3px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  }
+  .truck-icon {
+    font-size: 22px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6));
+    line-height: 1;
+  }
+
+  /* leaflet popup */
+  .leaflet-popup-content-wrapper {
+    background: var(--navy2) !important; border: 1px solid var(--steel) !important;
+    color: var(--white) !important; border-radius: 8px !important;
+    font-family: 'Inter', sans-serif !important;
+  }
+  .leaflet-popup-tip { background: var(--navy2) !important; }
+  .leaflet-popup-content { margin: 10px 14px !important; }
+  .popup-name { font-size: 14px; font-weight: 700; color: var(--amber); margin-bottom: 4px; }
+  .popup-data { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--mist); line-height: 1.7; }
+
+  /* background warning banner */
+  #bg-banner {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 800;
+    background: rgba(13,27,42,.95); border-top: 1px solid var(--amber);
+    padding: 10px 16px; font-size: 12px; color: var(--mist);
+    display: none; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  #bg-banner.show { display: flex; }
+  #bg-banner span { flex: 1; line-height: 1.4; }
+  #bg-banner button { background: none; border: none; color: var(--mist); cursor: pointer; font-size: 16px; flex-shrink: 0; }
+
+  /* overlay when panel open on mobile */
+  #overlay {
+    display: none; position: fixed; inset: 0; z-index: 399;
+    background: rgba(0,0,0,.4);
+  }
+  #overlay.show { display: block; }
+</style>
 </head>
-<body class="flex h-screen overflow-hidden">
-    <aside class="w-64 glass p-6 border-r border-white/10">
-        <h1 class="text-xl font-bold text-yellow-500 mb-10">FleetManager Pro</h1>
-        <nav class="space-y-4">
-            <button onclick="show('truck-roster')" class="block w-full p-3 hover:bg-white/10 rounded border-l-4 border-transparent hover:border-yellow-500 transition">TRUCK ROSTER</button>
-            <button onclick="show('trip-entry')" class="block w-full p-3 hover:bg-white/10 rounded border-l-4 border-yellow-500 transition">TRIP ENTRY</button>
-        </nav>
-    </aside>
+<body>
 
-    <main class="flex-1 p-10 overflow-auto">
-        <section id="trip-entry" class="glass p-8 rounded-xl max-w-2xl">
-            <h2 class="text-2xl font-semibold mb-6">Log New Trip</h2>
-            <form id="tripForm" class="grid grid-cols-2 gap-6">
-                <input type="text" id="driver" class="bg-black/50 p-3 rounded border border-white/10" readonly placeholder="Driver Name">
-                <input type="date" id="tripDate" class="bg-black/50 p-3 rounded border border-white/10">
-                
-                <select id="truckSelect" class="bg-black/50 p-3 rounded border border-white/10 col-span-2" onchange="autoFillOdo()">
-                    <option value="">-- Select Truck --</option>
-                </select>
+<!-- ══════════ LOGIN SCREEN ══════════ -->
+<div id="login-screen">
+  <div class="logo">Cedar Grove</div>
+  <h1>Fleet Tracker</h1>
+  <p class="sub">Select your name to begin sharing location</p>
+  <div class="driver-grid" id="driver-grid"></div>
+  <p id="login-note">Your location will be shared live with all active drivers. Keep this tab open for continuous tracking.</p>
+</div>
 
-                <input type="number" id="beginOdo" class="bg-black/50 p-3 rounded border border-white/10" readonly placeholder="Begin Odometer">
-                <input type="number" id="endOdo" class="bg-black/50 p-3 rounded border border-white/10" placeholder="End Odometer" oninput="calculate()">
-                
-                <input type="number" id="totalMiles" class="bg-black/50 p-3 rounded border border-white/10" readonly placeholder="Total Miles">
-                <input type="number" id="sdMiles" class="bg-black/50 p-3 rounded border border-white/10" readonly placeholder="SD Miles">
-            </form>
-        </section>
-    </main>
-    <script src="app.js"></script>
+<!-- ══════════ MAP ══════════ -->
+<div id="map"></div>
+
+<!-- Panel toggle -->
+<button id="panel-toggle" onclick="togglePanel()" title="Open panel">☰</button>
+
+<!-- Overlay -->
+<div id="overlay" onclick="togglePanel()"></div>
+
+<!-- ══════════ SIDE PANEL ══════════ -->
+<div id="panel">
+  <div class="panel-header">
+    <div class="branding">
+      <div class="eyebrow">Cedar Grove</div>
+      <h2>Fleet Tracker</h2>
+    </div>
+    <button id="close-panel" onclick="togglePanel()">✕</button>
+  </div>
+
+  <!-- Me card -->
+  <div id="me-card">
+    <div class="label">YOU</div>
+    <div class="name" id="me-name">—</div>
+    <div class="coords" id="me-coords">Acquiring GPS…</div>
+    <div class="status-row">
+      <div id="gps-dot"></div>
+      <div id="gps-status">Waiting for signal</div>
+    </div>
+  </div>
+
+  <div class="section-label">Active Drivers <span id="sel-count" style="color:var(--amber)"></span></div>
+  <div id="select-toolbar">
+    <button class="btn-fit" onclick="fitSelected()">🗺 Fit Selected</button>
+    <button class="btn-clear-sel" onclick="clearSelection()">Clear</button>
+  </div>
+  <div id="driver-list"></div>
+
+  <div class="panel-footer">
+    <button class="btn-locate" onclick="locateMe()">📍 Center on Me</button>
+    <button class="btn-signout" onclick="signOut()">Sign out</button>
+  </div>
+</div>
+
+<!-- ══════════ TOAST ══════════ -->
+<div id="toast"></div>
+
+<!-- Background warning -->
+<div id="bg-banner" id="bg-banner">
+  <span>⚠️ <strong>Keep this tab active</strong> — browser GPS pauses when the screen locks. For best results, disable screen timeout while tracking.</span>
+  <button onclick="document.getElementById('bg-banner').classList.remove('show')">✕</button>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+import { getDatabase, ref, set, onValue, remove, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
+
+// ══════════════════════════════════════════════════
+//  🔧 FIREBASE CONFIG — replace with your own:
+//  1. Go to https://console.firebase.google.com
+//  2. Create a project → Add web app
+//  3. Copy the config object here
+//  4. In Firebase console: Build → Realtime Database → Create database
+//     Rules: { "rules": { ".read": true, ".write": true } }
+// ══════════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyCNCxdr9fXdt91fwJbYuAkyh3jSUqhAuVQ",
+  authDomain:        "cedar-grove-fleet.firebaseapp.com",
+  databaseURL:       "https://cedar-grove-fleet-default-rtdb.firebaseio.com",
+  projectId:         "cedar-grove-fleet",
+  storageBucket:     "cedar-grove-fleet.firebasestorage.app",
+  messagingSenderId: "308659503891",
+  appId:             "1:308659503891:web:e92a5509543cbfcb4dd0e6",
+  measurementId:     "G-PN467TBLVH"
+};
+
+// ── DRIVER LIST (matches your fleet) ──
+const DRIVERS = [
+  "Brad","Chase","Cody","Colby","Colt","Dally",
+  "Eric","Gavin","Joe","Levi","Logan","Matt","Tony"
+];
+
+// ── MARKER COLORS (cycles through these) ──
+const COLORS = [
+  "#f4a916","#3ddc84","#4fc3f7","#ff7043","#ce93d8",
+  "#80cbc4","#ffb300","#e57373","#81c784","#64b5f6",
+  "#a1887f","#90a4ae","#fff176"
+];
+
+// ─────────────────────────────────────────
+let app, db, myDriver = null, watchId = null;
+let map, markers = {}, myMarker = null;
+let panelOpen = false;
+const colorMap = {};
+const selectedDrivers = new Set();
+DRIVERS.forEach((d, i) => colorMap[d] = COLORS[i % COLORS.length]);
+
+// ── BUILD LOGIN GRID ──
+const grid = document.getElementById("driver-grid");
+DRIVERS.forEach(name => {
+  const btn = document.createElement("button");
+  btn.className = "driver-btn";
+  btn.innerHTML = `<span class="dot" style="background:${colorMap[name]}"></span>${name}`;
+  btn.onclick = () => startTracking(name);
+  grid.appendChild(btn);
+});
+
+// ── INIT MAP ──
+const leafMap = L.map("map", { zoomControl: false }).setView([44.0, -100.0], 5);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 19
+}).addTo(leafMap);
+L.control.zoom({ position: "bottomright" }).addTo(leafMap);
+
+// ── START TRACKING ──
+async function startTracking(name) {
+  myDriver = name;
+  document.getElementById("me-name").textContent = name;
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("panel").classList.add("open");
+  panelOpen = true;
+
+  // init Firebase
+  app = initializeApp(FIREBASE_CONFIG);
+  db  = getDatabase(app);
+
+  // watch all drivers
+  const driversRef = ref(db, "drivers");
+  onValue(driversRef, snap => {
+    const data = snap.val() || {};
+    updateDriverList(data);
+    updateMarkers(data);
+  });
+
+  // start GPS
+  startGPS();
+
+  // background warning after 5s
+  setTimeout(() => document.getElementById("bg-banner").classList.add("show"), 5000);
+
+  // re-acquire GPS if tab becomes visible again
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && watchId === null) startGPS();
+  });
+}
+
+// ── GPS ──
+function startGPS() {
+  if (!navigator.geolocation) {
+    setGpsStatus("error", "GPS not supported");
+    return;
+  }
+  setGpsStatus("waiting", "Acquiring signal…");
+
+  watchId = navigator.geolocation.watchPosition(
+    pos => onPosition(pos),
+    err => {
+      setGpsStatus("error", gpsErrorMsg(err));
+      watchId = null;
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+  );
+}
+
+function onPosition(pos) {
+  const { latitude: lat, longitude: lng, speed, accuracy } = pos.coords;
+  const kph = speed != null ? Math.round(speed * 3.6) : null;
+
+  setGpsStatus("active", `±${Math.round(accuracy)}m accuracy`);
+  document.getElementById("me-coords").textContent =
+    `${lat.toFixed(5)}, ${lng.toFixed(5)}${kph != null ? ` · ${kph} kph` : ""}`;
+
+  // write to Firebase
+  if (db && myDriver) {
+    set(ref(db, `drivers/${myDriver}`), {
+      lat, lng,
+      speed: kph,
+      accuracy: Math.round(accuracy),
+      ts: Date.now()
+    });
+  }
+
+  // center map on first fix
+  if (!myMarker) {
+    leafMap.setView([lat, lng], 12);
+    showToast("📍 GPS locked");
+  }
+  updateMyMarker(lat, lng);
+}
+
+function updateMyMarker(lat, lng) {
+  const color = colorMap[myDriver] || "#f4a916";
+  if (myMarker) {
+    myMarker.setLatLng([lat, lng]);
+  } else {
+    myMarker = L.marker([lat, lng], { icon: makeTruckIcon(myDriver, color, true), zIndexOffset: 1000 })
+      .addTo(leafMap);
+  }
+}
+
+// ── MARKERS ──
+function makeTruckIcon(name, color, isMe, highlighted) {
+  const truck = isMe ? "🚛" : "🚚";
+  const hlClass = highlighted ? " highlighted" : "";
+  const html = `
+    <div class="truck-marker-wrap${hlClass}">
+      <div class="truck-label" style="border-color:${color};color:${color}">${name}${isMe ? " ★" : ""}</div>
+      <div class="truck-icon">${truck}</div>
+    </div>`;
+  return L.divIcon({ html, className: "", iconSize: [80, 52], iconAnchor: [40, 52] });
+}
+
+function updateMarkers(data) {
+  // remove stale
+  Object.keys(markers).forEach(name => {
+    if (!data[name] && name !== myDriver) {
+      leafMap.removeLayer(markers[name]);
+      delete markers[name];
+    }
+  });
+
+  Object.entries(data).forEach(([name, d]) => {
+    if (name === myDriver) return;
+    const color = colorMap[name] || "#aaa";
+    const highlighted = selectedDrivers.has(name);
+
+    if (markers[name]) {
+      markers[name].setLatLng([d.lat, d.lng]);
+      markers[name].setIcon(makeTruckIcon(name, color, false, highlighted));
+    } else {
+      markers[name] = L.marker([d.lat, d.lng], { icon: makeTruckIcon(name, color, false, highlighted) })
+        .addTo(leafMap)
+        .bindPopup(() => popupContent(name, d));
+    }
+    markers[name].setPopupContent(popupContent(name, d));
+  });
+}
+
+function popupContent(name, d) {
+  const color = colorMap[name] || "#aaa";
+  const ago = timeAgo(d.ts);
+  const spd = d.speed != null ? `${d.speed} kph` : "—";
+  return `<div class="popup-name" style="color:${color}">${name}</div>
+    <div class="popup-data">
+      ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}<br>
+      Speed: ${spd}<br>
+      Accuracy: ±${d.accuracy}m<br>
+      Updated: ${ago}
+    </div>`;
+}
+
+// ── DRIVER LIST ──
+function updateDriverList(data) {
+  const list = document.getElementById("driver-list");
+  list.innerHTML = "";
+
+  const sorted = Object.entries(data).sort(([,a],[,b]) => (b.ts||0) - (a.ts||0));
+  if (!sorted.length) {
+    list.innerHTML = `<div style="color:var(--mist);font-size:12px;padding:8px 4px">No other drivers online yet.</div>`;
+    return;
+  }
+
+  sorted.forEach(([name, d]) => {
+    const color = colorMap[name] || "#aaa";
+    const stale = Date.now() - d.ts > 90000;
+    const ago = timeAgo(d.ts);
+    const spd = d.speed != null ? `${d.speed} kph` : "—";
+    const isMe = name === myDriver;
+    const isSel = selectedDrivers.has(name);
+
+    const row = document.createElement("div");
+    row.className = `driver-row${stale ? " stale" : ""}${isSel ? " selected" : ""}`;
+    row.dataset.name = name;
+    row.innerHTML = `
+      <div class="d-dot" style="background:${color}${stale ? ";opacity:.4" : ""}"></div>
+      <div class="d-info">
+        <div class="d-name">${name}${isMe ? " (you)" : ""}</div>
+        <div class="d-meta">${spd} · ±${d.accuracy}m</div>
+      </div>
+      <div class="d-age">${ago}</div>
+      <div class="d-check">✓</div>`;
+
+    row.onclick = () => {
+      // toggle selection
+      if (selectedDrivers.has(name)) {
+        selectedDrivers.delete(name);
+      } else {
+        selectedDrivers.add(name);
+      }
+      updateSelectionUI();
+      // also fly to single-tapped driver if nothing else selected
+      if (selectedDrivers.size === 1 && selectedDrivers.has(name)) {
+        leafMap.setView([d.lat, d.lng], 14);
+        if (markers[name]) markers[name].openPopup();
+      }
+    };
+    list.appendChild(row);
+  });
+
+  updateSelectionUI();
+}
+
+// ── CONTROLS ──
+window.togglePanel = function() {
+  panelOpen = !panelOpen;
+  document.getElementById("panel").classList.toggle("open", panelOpen);
+  document.getElementById("overlay").classList.toggle("show", panelOpen);
+};
+
+function updateSelectionUI() {
+  const count = selectedDrivers.size;
+  const toolbar = document.getElementById("select-toolbar");
+  const countEl = document.getElementById("sel-count");
+
+  toolbar.classList.toggle("visible", count > 0);
+  countEl.textContent = count > 0 ? `· ${count} selected` : "";
+
+  // update row highlight classes without full re-render
+  document.querySelectorAll(".driver-row[data-name]").forEach(row => {
+    const name = row.dataset.name;
+    row.classList.toggle("selected", selectedDrivers.has(name));
+  });
+
+  // update marker highlight icons
+  Object.entries(markers).forEach(([name, marker]) => {
+    const color = colorMap[name] || "#aaa";
+    marker.setIcon(makeTruckIcon(name, color, false, selectedDrivers.has(name)));
+  });
+}
+
+window.fitSelected = function() {
+  if (!selectedDrivers.size) return;
+  const latlngs = [];
+  selectedDrivers.forEach(name => {
+    if (markers[name]) latlngs.push(markers[name].getLatLng());
+    if (name === myDriver && myMarker) latlngs.push(myMarker.getLatLng());
+  });
+  if (latlngs.length) {
+    leafMap.fitBounds(L.latLngBounds(latlngs), { padding: [50, 50], maxZoom: 14 });
+  }
+  togglePanel();
+};
+
+window.clearSelection = function() {
+  selectedDrivers.clear();
+  updateSelectionUI();
+};
+
+window.locateMe = function() {
+  if (myMarker) {
+    leafMap.setView(myMarker.getLatLng(), 14);
+    togglePanel();
+  } else {
+    showToast("GPS not locked yet");
+  }
+};
+
+window.signOut = function() {
+  if (myDriver && db) {
+    remove(ref(db, `drivers/${myDriver}`));
+  }
+  if (watchId) navigator.geolocation.clearWatch(watchId);
+  location.reload();
+};
+
+// ── HELPERS ──
+function setGpsStatus(state, msg) {
+  const dot = document.getElementById("gps-dot");
+  dot.className = "";
+  if (state === "active") dot.classList.add("active");
+  if (state === "error")  dot.classList.add("error");
+  document.getElementById("gps-status").textContent = msg;
+}
+
+function gpsErrorMsg(err) {
+  if (err.code === 1) return "Location permission denied";
+  if (err.code === 2) return "Position unavailable";
+  return "GPS timeout — retrying";
+}
+
+function timeAgo(ts) {
+  if (!ts) return "—";
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 10) return "now";
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s/60)}m ago`;
+  return `${Math.floor(s/3600)}h ago`;
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2800);
+}
+
+// refresh driver list timestamps every 15s
+setInterval(() => {
+  const list = document.getElementById("driver-list");
+  if (list.children.length) {
+    // trigger re-read by forcing onValue — simplest: just re-render from cache
+  }
+}, 15000);
+
+</script>
 </body>
 </html>

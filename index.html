@@ -326,8 +326,8 @@ const FIREBASE_CONFIG = {
 
 // ── DRIVER LIST (matches your fleet) ──
 const DRIVERS = [
-  "Brad","Chase","Cody","Colby","Colt","Dally",
-  "Eric","Gavin","Joe","Levi","Logan","Matt","Tony"
+  "Zack","Derek","Joshua","Ben","Cameron","Silas",
+  "Tom","Kenneth","Marvin","David George","David JR","Jonas","Tim"
 ];
 
 // ── MARKER COLORS (cycles through these) ──
@@ -415,11 +415,11 @@ function startGPS() {
 
 function onPosition(pos) {
   const { latitude: lat, longitude: lng, speed, accuracy } = pos.coords;
-  const kph = speed != null ? Math.round(speed * 3.6) : null;
+  const kph = speed != null ? Math.round(speed * 2.237) : null;
 
   setGpsStatus("active", `±${Math.round(accuracy)}m accuracy`);
   document.getElementById("me-coords").textContent =
-    `${lat.toFixed(5)}, ${lng.toFixed(5)}${kph != null ? ` · ${kph} kph` : ""}`;
+    `${lat.toFixed(5)}, ${lng.toFixed(5)}${kph != null ? ` · ${kph} mph` : ""}`;
 
   // write to Firebase
   if (db && myDriver) {
@@ -490,7 +490,7 @@ function updateMarkers(data) {
 function popupContent(name, d) {
   const color = colorMap[name] || "#aaa";
   const ago = timeAgo(d.ts);
-  const spd = d.speed != null ? `${d.speed} kph` : "—";
+  const spd = d.speed != null ? `${d.speed} mph` : "—";
   return `<div class="popup-name" style="color:${color}">${name}</div>
     <div class="popup-data">
       ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}<br>
@@ -515,7 +515,7 @@ function updateDriverList(data) {
     const color = colorMap[name] || "#aaa";
     const stale = Date.now() - d.ts > 90000;
     const ago = timeAgo(d.ts);
-    const spd = d.speed != null ? `${d.speed} kph` : "—";
+    const spd = d.speed != null ? `${d.speed} mph` : "—";
     const isMe = name === myDriver;
     const isSel = selectedDrivers.has(name);
 

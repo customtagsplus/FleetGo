@@ -143,6 +143,12 @@
   .driver-row.selected { border-color: var(--amber); background: rgba(244,169,22,.12); }
   .driver-row .d-check { font-size: 14px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
   .driver-row.selected .d-check { opacity: 1; }
+  .d-remove {
+    background: none; border: none; color: var(--mist); cursor: pointer;
+    font-size: 15px; padding: 2px 4px; border-radius: 4px; flex-shrink: 0;
+    transition: color 0.15s, background 0.15s; line-height: 1;
+  }
+  .d-remove:hover { color: var(--red); background: rgba(255,77,77,.12); }
 
   /* multi-select toolbar */
   #select-toolbar { margin: 0 12px 8px; display: none; gap: 6px; }
@@ -283,6 +289,7 @@
 
   <div class="panel-footer">
     <button class="btn-locate" onclick="locateMe()">📍 Center on Me</button>
+    <button class="btn-locate" style="background:var(--steel);color:var(--white)" onclick="clearOffline()">🗑 Clear Offline Drivers</button>
     <button class="btn-signout" onclick="signOut()">Sign out</button>
   </div>
 </div>
@@ -302,7 +309,7 @@
 <!-- Firebase -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-import { getDatabase, ref, set, onValue, remove, serverTimestamp }
+import { getDatabase, ref, set, onValue, remove, get, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
 
 // ══════════════════════════════════════════════════
@@ -326,8 +333,8 @@ const FIREBASE_CONFIG = {
 
 // ── DRIVER LIST (matches your fleet) ──
 const DRIVERS = [
-  "Zack","Derek","Joshua","Ben","Cameron","Silas",
-  "Tom","Kenneth","Marvin","David George","David JR","Jonas","Tim"
+  "Brad","Chase","Cody","Colby","Colt","Dally",
+  "Eric","Gavin","Joe","Levi","Logan","Matt","Tony"
 ];
 
 // ── MARKER COLORS (cycles through these) ──
@@ -529,7 +536,8 @@ function updateDriverList(data) {
         <div class="d-meta">${spd} · ±${d.accuracy}m</div>
       </div>
       <div class="d-age">${ago}</div>
-      <div class="d-check">✓</div>`;
+      <div class="d-check">✓</div>
+      <button class="d-remove" title="Remove from map">🗑</button>`;
 
     row.onclick = () => {
       // toggle selection
@@ -544,6 +552,12 @@ function updateDriverList(data) {
         leafMap.setView([d.lat, d.lng], 14);
         if (markers[name]) markers[name].openPopup();
       }
+    };
+
+    // remove button — wired after innerHTML so element exists
+    row.querySelector(".d-remove").onclick = (e) => {
+      e.stopPropagation();
+      removeDriver(name);
     };
     list.appendChild(row);
   });
@@ -595,6 +609,35 @@ window.fitSelected = function() {
 window.clearSelection = function() {
   selectedDrivers.clear();
   updateSelectionUI();
+};
+
+// remove a single driver from Firebase + map
+function removeDriver(name) {
+  if (!db) return;
+  remove(ref(db, `drivers/${name}`));
+  if (markers[name]) {
+    leafMap.removeLayer(markers[name]);
+    delete markers[name];
+  }
+  selectedDrivers.delete(name);
+  showToast(`${name} removed from map`);
+}
+
+// remove all drivers whose last update is > 2 minutes ago
+window.clearOffline = function() {
+  if (!db) return;
+  let count = 0;
+  get(ref(db, "drivers")).then(snap => {
+    const data = snap.val() || {};
+    Object.entries(data).forEach(([name, d]) => {
+      if (name === myDriver) return;
+      if (Date.now() - d.ts > 120000) {
+        removeDriver(name);
+        count++;
+      }
+    });
+    showToast(count ? `Cleared ${count} offline driver${count > 1 ? "s" : ""}` : "No offline drivers found");
+  });
 };
 
 window.locateMe = function() {
